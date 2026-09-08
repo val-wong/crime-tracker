@@ -28,6 +28,11 @@ class TimeBucketItem(BaseModel):
 
 class NeighborhoodItem(BaseModel):
     neighborhood: Optional[str] = None
+    # Official Chicago community area name for `neighborhood`'s code --
+    # see app/chicago_community_areas.py. `None` when `neighborhood` is
+    # `None` or isn't a recognized code; `neighborhood` itself is always
+    # preserved unchanged for filtering/querying.
+    name: Optional[str] = None
     count: int
 
 
@@ -54,3 +59,9 @@ class SummaryResponse(BaseModel):
 
     top_neighborhoods: list[NeighborhoodItem] = []
     most_represented_neighborhood: Optional[str] = None
+    # Official name for `most_represented_neighborhood`'s code -- added
+    # alongside the existing code field (backward compatible; existing
+    # callers filtering/querying by the numeric code are unaffected).
+    # `None` when there's no most-represented neighborhood, or its code
+    # isn't a recognized Chicago community area.
+    most_represented_neighborhood_name: Optional[str] = None

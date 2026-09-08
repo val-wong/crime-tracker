@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import { fetchStatus, fetchSummary } from "./api/client";
+import { fetchCategories, fetchStatus, fetchSummary } from "./api/client";
 import type { DatasetStatusResponse, Incident, SummaryResponse } from "./api/types";
 import DataCaveatInfo from "./components/DataCaveatInfo";
 import FiltersPanel from "./components/FiltersPanel";
@@ -22,6 +22,7 @@ export default function App() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [status, setStatus] = useState<DatasetStatusResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const apiFilters = {
@@ -44,6 +45,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Fetched once, independent of any committed filter -- see
+    // fetchCategories's own comment for why this must not be derived
+    // from /api/summary's (filter-scoped) category_breakdown.
+    fetchCategories()
+      .then((data) => setCategoryOptions([...data.categories].sort()))
+      .catch(() => setCategoryOptions([]));
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     setSummaryLoading(true);
     fetchSummary(apiFilters)
@@ -62,11 +72,15 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.from, filters.to, filters.category, filters.neighborhood]);
 
-  const categoryOptions =
-    summary?.category_breakdown.map((c) => c.category).filter((c): c is string => Boolean(c)) ?? [];
-  const neighborhoodOptions =
-    summary?.top_neighborhoods.map((n) => n.neighborhood).filter((n): n is string => Boolean(n)) ??
-    [];
+  // When no explicit date filter is committed, the backend still
+  // analyzes a default period anchored to its own latest loaded date
+  // (see app/services/summary.py::_default_period) -- surfaced here so
+  // the filter form can show that effective range without misleadingly
+  // pre-filling the date inputs themselves (see FiltersPanel.tsx).
+  const effectivePeriod =
+    !filters.from && !filters.to && summary
+      ? { start: summary.start_date, end: summary.end_date }
+      : null;
 
   return (
     <div className="app">
@@ -87,11 +101,13 @@ export default function App() {
 
         <div className="app__side-column">
           <FiltersPanel
-            filters={filters}
-            onChange={setFilters}
+            committedFilters={filters}
+            onApply={setFilters}
             onClear={clearFilters}
             categoryOptions={categoryOptions}
-            neighborhoodOptions={neighborhoodOptions}
+            dateBounds={{ min: status?.earliest_occurred_date, max: status?.latest_occurred_date }}
+            applyDisabled={summaryLoading}
+            effectivePeriod={effectivePeriod}
           />
           <SummaryCards summary={summary} loading={summaryLoading} />
         </div>

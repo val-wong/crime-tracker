@@ -455,7 +455,7 @@ intersection-style alternate encoding observed in Chicago's schema.
 
 | Use case | Assessment |
 |---|---|
-| Neighborhood trends | **Good** — via `community_area` (77 defined areas), though it's a numeric code requiring a lookup table, not a name field. |
+| Neighborhood trends | **Good** — via `community_area` (77 defined areas). It's stored as a numeric code, not a name; resolved to the official name for display via a static lookup table (`backend/app/chicago_community_areas.py`, `frontend/src/data/chicagoCommunityAreas.ts`), sourced from the City's own "Boundaries - Community Areas" dataset (`igwz-8jzy`). The numeric code remains the value used for filtering/querying. |
 | H3/grid aggregation | **Good** — a bounded one-block shift is small relative to any reasonable hex-cell size. |
 | Half-mile radius search | **Good-to-Moderate** — a one-block shift is a small, bounded, uniformly-applied error relative to a half-mile radius; meaningfully more trustworthy than Denver's category-dependent mix, though still not exact. |
 | Address-proximity search | **Poor** — by explicit design, the published coordinate is never the true address; any "distance to this exact address" feature would systematically misstate precision if it treated Chicago's coordinates as exact. |

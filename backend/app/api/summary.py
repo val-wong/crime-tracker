@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.chicago_community_areas import resolve_community_area_name
 from app.constants import CHICAGO_SOURCE_KEY
 from app.db.session import get_db
 from app.repositories import sources as sources_repo
@@ -85,8 +86,15 @@ def summary(
             for t in result.incidents_by_time
         ],
         top_neighborhoods=[
-            NeighborhoodItem(neighborhood=n.neighborhood, count=n.count)
+            NeighborhoodItem(
+                neighborhood=n.neighborhood,
+                name=resolve_community_area_name(n.neighborhood),
+                count=n.count,
+            )
             for n in result.top_neighborhoods
         ],
         most_represented_neighborhood=most_represented_neighborhood,
+        most_represented_neighborhood_name=resolve_community_area_name(
+            most_represented_neighborhood
+        ),
     )

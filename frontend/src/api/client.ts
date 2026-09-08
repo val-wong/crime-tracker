@@ -1,5 +1,6 @@
 import type {
   BoundingBox,
+  CategoryListResponse,
   DatasetStatusResponse,
   IncidentAggregateResponse,
   IncidentFilters,
@@ -45,6 +46,15 @@ async function getJson<T>(
 
 export function fetchStatus(): Promise<DatasetStatusResponse> {
   return getJson<DatasetStatusResponse>("/api/status", {});
+}
+
+// The complete, filter-independent set of valid category values --
+// see backend/app/api/categories.py. Deliberately not derived from
+// /api/summary's category_breakdown, which is scoped to whatever
+// date/neighborhood is currently selected and can therefore omit real
+// categories that just aren't among the top ones in that window.
+export function fetchCategories(): Promise<CategoryListResponse> {
+  return getJson<CategoryListResponse>("/api/categories", {});
 }
 
 export interface FetchIncidentsOptions extends IncidentFilters {

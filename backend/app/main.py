@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.categories import router as categories_router
 from app.api.incidents import router as incidents_router
 from app.api.status import router as status_router
 from app.api.summary import router as summary_router
@@ -28,6 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(categories_router)
 app.include_router(incidents_router)
 app.include_router(status_router)
 app.include_router(summary_router)

@@ -78,6 +78,9 @@ export interface TimeBucketItem {
 
 export interface NeighborhoodItem {
   neighborhood: string | null;
+  // Official Chicago community area name for `neighborhood`'s code --
+  // null when `neighborhood` is null or isn't a recognized code.
+  name: string | null;
   count: number;
 }
 
@@ -99,6 +102,10 @@ export interface SummaryResponse {
   incidents_by_time: TimeBucketItem[];
   top_neighborhoods: NeighborhoodItem[];
   most_represented_neighborhood: string | null;
+  // Official name for `most_represented_neighborhood`'s code -- added
+  // alongside the existing code field; null when there's no
+  // most-represented neighborhood or its code isn't recognized.
+  most_represented_neighborhood_name: string | null;
 }
 
 export interface BoundingBox {
@@ -113,4 +120,8 @@ export interface IncidentFilters {
   endDate?: string;
   category?: string;
   neighborhood?: string;
+}
+
+export interface CategoryListResponse {
+  categories: string[];
 }

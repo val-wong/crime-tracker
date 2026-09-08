@@ -20,8 +20,9 @@ const BASE_SUMMARY: SummaryResponse = {
     { bucket_start: "2026-08-03", count: 300, is_partial: false },
     { bucket_start: "2026-08-24", count: 150, is_partial: true },
   ],
-  top_neighborhoods: [{ neighborhood: "25", count: 200 }],
+  top_neighborhoods: [{ neighborhood: "25", name: "Austin", count: 200 }],
   most_represented_neighborhood: "25",
+  most_represented_neighborhood_name: "Austin",
 };
 
 // Regression test: a trend bucket whose real source coverage ends

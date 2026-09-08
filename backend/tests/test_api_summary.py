@@ -107,3 +107,31 @@ def test_summary_category_breakdown_and_top_neighborhoods(db):
     assert any(c["category"] == "HOMICIDE" for c in body["category_breakdown"])
     assert body["time_bucket"] == "week"  # an 11-day span uses weekly buckets
     assert len(body["top_neighborhoods"]) > 0
+
+
+def test_summary_resolves_neighborhood_codes_to_official_names(db):
+    _ingest_fixture_rows(db)
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/summary", params={"start_date": "2001-01-01", "end_date": "2001-01-12"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    body = response.json()
+    # Fixture row G000705 has community_area "28" -- Chicago's official
+    # name for code 28 is "Near West Side" (see
+    # app/chicago_community_areas.py). The numeric code is preserved
+    # unchanged alongside the resolved name, for backward-compatible
+    # filtering/querying.
+    area_28 = next(n for n in body["top_neighborhoods"] if n["neighborhood"] == "28")
+    assert area_28["name"] == "Near West Side"
+
+    most_represented = body["most_represented_neighborhood"]
+    assert most_represented is not None
+    assert body["most_represented_neighborhood_name"] == (
+        next(n["name"] for n in body["top_neighborhoods"] if n["neighborhood"] == most_represented)
+    )

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { Incident } from "../api/types";
+import { resolveCommunityAreaName } from "../data/chicagoCommunityAreas";
 
 interface IncidentDetailProps {
   incident: Incident | null;
@@ -98,7 +99,11 @@ export default function IncidentDetail({ incident, onClose }: IncidentDetailProp
         <dd>{formatDateTime(incident.occurred_at)}</dd>
 
         <dt>Neighborhood</dt>
-        <dd>{incident.neighborhood ?? "Unknown"} (community area code)</dd>
+        <dd>
+          {incident.neighborhood
+            ? `${resolveCommunityAreaName(incident.neighborhood) ?? "Unknown"} (${incident.neighborhood})`
+            : "Unknown"}
+        </dd>
 
         <dt>District / Beat</dt>
         <dd>

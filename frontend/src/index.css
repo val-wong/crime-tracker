@@ -254,7 +254,8 @@ button:disabled {
   font-size: 0.85rem;
 }
 
-.filters-panel__field input {
+.filters-panel__field input,
+.filters-panel__field select {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 6px;
@@ -262,9 +263,23 @@ button:disabled {
   color: var(--color-text);
 }
 
-.filters-panel__hint {
+.filters-panel__hint,
+.filters-panel__note {
+  margin: 0;
   color: var(--color-muted);
   font-weight: normal;
+  font-size: 0.8rem;
+}
+
+.filters-panel__error {
+  margin: 0;
+  color: var(--color-accent);
+  font-size: 0.85rem;
+}
+
+.filters-panel__actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .filters-panel__form button {
@@ -274,6 +289,12 @@ button:disabled {
   border-radius: 6px;
   background: var(--color-bg);
   color: var(--color-text);
+}
+
+.filters-panel__apply {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
 }
 
 /* ---- Summary cards ---- */

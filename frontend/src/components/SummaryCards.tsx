@@ -11,6 +11,16 @@ function formatChange(percentChange: number | null): string {
   return `${sign}${percentChange}% vs. prior period`;
 }
 
+// `code` (the Chicago community area code) is always preserved and
+// shown alongside the resolved name -- both for transparency and as a
+// graceful fallback when the code isn't a recognized community area
+// (doesn't crash; shows "Unknown (<code>)" instead of a blank value).
+function formatNeighborhood(name: string | null, code: string | null): string {
+  if (!code) return "—";
+  if (!name) return `Unknown (${code})`;
+  return `${name} (${code})`;
+}
+
 export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
   if (loading) {
     return (
@@ -55,10 +65,13 @@ export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
 
       <article className="summary-card">
         <h3>Most represented neighborhood</h3>
-        <p className="summary-card__value">{summary.most_represented_neighborhood ?? "—"}</p>
-        <p className="summary-card__detail">
-          Chicago community area code — see the data notes for why this isn't a name
+        <p className="summary-card__value">
+          {formatNeighborhood(
+            summary.most_represented_neighborhood_name,
+            summary.most_represented_neighborhood,
+          )}
         </p>
+        <p className="summary-card__detail">Among reported incidents in the selected period</p>
       </article>
     </div>
   );

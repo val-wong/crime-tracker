@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,6 +73,12 @@ const PARTIAL_STATUS: DatasetStatusResponse = {
   offense_count: 500000,
 };
 
+// Deliberately does NOT match SUMMARY.category_breakdown below (which
+// only has THEFT/BATTERY) -- the dropdown must reflect this complete
+// list from /api/categories, not whatever happens to be in the
+// currently-committed summary's (filter-scoped) breakdown.
+const CATEGORIES = ["BATTERY", "MOTOR VEHICLE THEFT", "ROBBERY", "THEFT"];
+
 const SUMMARY: SummaryResponse = {
   start_date: "2026-08-01",
   end_date: "2026-08-31",
@@ -92,19 +98,24 @@ const SUMMARY: SummaryResponse = {
     { bucket_start: "2026-08-01", count: 300, is_partial: false },
     { bucket_start: "2026-08-08", count: 400, is_partial: false },
   ],
-  top_neighborhoods: [{ neighborhood: "25", count: 200 }],
+  top_neighborhoods: [{ neighborhood: "25", name: "Austin", count: 200 }],
   most_represented_neighborhood: "25",
+  most_represented_neighborhood_name: "Austin",
 };
 
 function mockFetchSequence(
   statusResponse: DatasetStatusResponse,
   summaryResponse: SummaryResponse | null,
+  categories: string[] = CATEGORIES,
 ) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) => {
       if (url.includes("/api/status")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(statusResponse) });
+      }
+      if (url.includes("/api/categories")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ categories }) });
       }
       if (url.includes("/api/summary")) {
         if (summaryResponse === null) {
@@ -172,30 +183,167 @@ describe("App", () => {
     expect(within(caveat as HTMLElement).getByText(/development notice/i)).toBeInTheDocument();
   });
 
-  it("updates the URL when a filter changes and clears it on reset", async () => {
+  it("offers the complete category list from /api/categories, not just what's in the summary breakdown", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    for (const category of ["THEFT", "BATTERY", "ROBBERY", "MOTOR VEHICLE THEFT"]) {
+      expect(screen.getByRole("option", { name: category })).toBeInTheDocument();
+    }
+  });
+
+  it("keeps category options stable when date/neighborhood filters change the summary breakdown", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      fetchSpy.mockImplementation((url: string) => {
+        if (url.includes("/api/status")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FULL_STATUS) });
+        }
+        if (url.includes("/api/categories")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ categories: CATEGORIES }),
+          });
+        }
+        if (url.includes("/api/summary")) {
+          // A different, narrower breakdown each time -- proves the
+          // dropdown isn't reading from this.
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                ...SUMMARY,
+                category_breakdown: [{ category: "ROBBERY", count: 1 }],
+              }),
+          });
+        }
+        return Promise.reject(new Error(`Unexpected fetch to ${url}`));
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("Neighborhood"), "Austin");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    await waitFor(() => expect(window.location.search).toContain("neighborhood=25"));
+
+    for (const category of ["THEFT", "BATTERY", "ROBBERY", "MOTOR VEHICLE THEFT"]) {
+      expect(screen.getByRole("option", { name: category })).toBeInTheDocument();
+    }
+    // /api/categories is fetched once, independent of committed filters.
+    expect(fetchSpy.mock.calls.filter(([url]) => url.includes("/api/categories"))).toHaveLength(1);
+  });
+
+  it("selecting 'All categories' and applying clears the committed category filter", async () => {
+    window.history.replaceState(null, "", "/?category=THEFT");
     mockFetchSequence(FULL_STATUS, SUMMARY);
     const user = userEvent.setup();
     render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
 
-    const categoryInput = screen.getByLabelText("Category");
-    await user.type(categoryInput, "THEFT");
+    await user.selectOptions(screen.getByLabelText("Category"), "All categories");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
 
+    await waitFor(() => expect(window.location.search).not.toContain("category"));
+  });
+
+  it("does not touch the URL while editing filters -- only Apply commits them", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("Category"), "THEFT");
+    expect(window.location.search).toBe("");
+
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => expect(window.location.search).toContain("category=THEFT"));
+  });
+
+  it("Apply commits category, neighborhood, and dates to the URL using API values", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText("Category"), "THEFT");
+    await user.selectOptions(screen.getByLabelText("Neighborhood"), "Austin");
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-08-29" } });
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    await waitFor(() => {
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get("category")).toBe("THEFT");
+      expect(params.get("neighborhood")).toBe("25");
+      expect(params.get("from")).toBe("2026-08-01");
+      expect(params.get("to")).toBe("2026-08-29");
+    });
+  });
+
+  it("Clear resets the form and the committed URL filters", async () => {
+    window.history.replaceState(null, "", "/?category=THEFT");
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
 
     const clearButton = screen.getByRole("button", { name: "Clear filters" });
     await user.click(clearButton);
 
     expect(window.location.search).toBe("");
-    expect((categoryInput as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Category") as HTMLSelectElement).value).toBe("");
   });
 
-  it("reads initial filters from the URL on load", () => {
-    window.history.replaceState(null, "", "/?category=BATTERY&neighborhood=25");
+  it("reads initial filters from the URL on load and restores them into the form", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?category=BATTERY&neighborhood=25&from=2026-08-01&to=2026-08-29",
+    );
     mockFetchSequence(FULL_STATUS, SUMMARY);
     render(<App />);
 
-    expect((screen.getByLabelText("Category") as HTMLInputElement).value).toBe("BATTERY");
-    expect((screen.getByLabelText(/Neighborhood/) as HTMLInputElement).value).toBe("25");
+    expect((screen.getByLabelText("Category") as HTMLSelectElement).value).toBe("BATTERY");
+    expect((screen.getByLabelText(/Neighborhood/) as HTMLSelectElement).value).toBe("25");
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("2026-08-01");
+    expect((screen.getByLabelText("To") as HTMLInputElement).value).toBe("2026-08-29");
+  });
+
+  it("does not pre-fill date inputs with the default period, but does show it as a note", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("To") as HTMLInputElement).value).toBe("");
+    expect(screen.getByText(/default recent period/)).toBeInTheDocument();
+  });
+
+  it("constrains the date inputs to the dataset's own coverage", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    expect(screen.getByLabelText("From")).toHaveAttribute("min", "2001-01-01");
+    expect(screen.getByLabelText("To")).toHaveAttribute("max", "2026-08-31");
+  });
+
+  it("rejects an out-of-coverage date range on Apply without changing the URL", async () => {
+    mockFetchSequence(FULL_STATUS, SUMMARY);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("1,200")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2099-01-01" } });
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/after the available data range/);
+    expect(window.location.search).toBe("");
   });
 
   it("opens and closes the incident detail panel on selection", async () => {
