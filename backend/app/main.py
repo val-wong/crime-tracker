@@ -10,7 +10,7 @@ from app.config import get_settings
 settings = get_settings()
 
 app = FastAPI(
-    title="Crime Tracker API",
+    title="CrimeSignal API",
     description=(
         "Serves normalized, aggregate public crime-incident data. "
         "Does not predict individual behavior; see docs/product.md."

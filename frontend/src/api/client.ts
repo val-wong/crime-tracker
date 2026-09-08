@@ -10,7 +10,7 @@ import type {
 
 // "localhost" and "127.0.0.1" are not interchangeable on every machine --
 // on this project's dev setup, "localhost:8000" resolves to an unrelated
-// service, while the Crime Tracker backend is only reachable via the
+// service, while the CrimeSignal backend is only reachable via the
 // explicit IPv4 loopback address. Always use 127.0.0.1 here.
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 

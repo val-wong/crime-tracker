@@ -138,7 +138,7 @@ describe("App", () => {
     mockFetchSequence(FULL_STATUS, SUMMARY);
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Crime Tracker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "CrimeSignal" })).toBeInTheDocument();
     expect(await screen.findByTestId("map-stub")).toBeInTheDocument();
     expect(screen.getByLabelText("Filter reported incidents")).toBeInTheDocument();
     expect(screen.getByText("About this data")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("App", () => {
     // showing "Loading summary…" forever (loading=false but summary=null
     // are two different states, both must be handled distinctly).
     expect(screen.queryByText("Loading summary…")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Crime Tracker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "CrimeSignal" })).toBeInTheDocument();
   });
 
   it("shows the full-dataset status banner when population is complete", async () => {

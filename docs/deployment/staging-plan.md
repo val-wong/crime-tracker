@@ -427,7 +427,7 @@ executes; it should not be set on the deployed staging service itself.
 
 | Variable | Staging value (example) |
 |---|---|
-| `VITE_API_BASE_URL` | `https://crime-tracker-api-staging.<host>` — must be set correctly **before** `npm run build` runs (§1); not a secret (it ends up visible in the built JS bundle regardless — it's just a public API URL). |
+| `VITE_API_BASE_URL` | `https://api-staging.getcrimesignal.com` — must be set correctly **before** `npm run build` runs (§1); not a secret (it ends up visible in the built JS bundle regardless — it's just a public API URL). |
 
 No frontend variable is a secret; there is nothing else to set.
 
@@ -435,22 +435,18 @@ No frontend variable is a secret; there is nothing else to set.
 
 ## 7. CORS / domain design
 
-**Recommended staging URLs** (illustrative — actual hostnames depend on
-whichever platform-provided subdomain or custom domain is used; a
-custom domain requires DNS control that may not exist yet, so the
-realistic Day-0 default is the platform's own subdomain):
+**Current staging URLs** (custom domain already decided — this
+supersedes the platform-subdomain placeholder this section previously
+sketched; DNS/domain setup itself is outside this document's scope):
 
-- Frontend: `https://crime-tracker-staging.<host>` (Render default
-  would look like `https://crime-tracker-frontend-staging.onrender.com`
-  until/unless a custom domain is mapped)
-- Backend: `https://crime-tracker-api-staging.<host>` (Render default:
-  `https://crime-tracker-api-staging.onrender.com`)
+- Frontend: `https://staging.getcrimesignal.com`
+- Backend: `https://api-staging.getcrimesignal.com`
 
 **Exact CORS behavior needed** (no code change — configuration only,
 per §1):
 
 - `BACKEND_CORS_ORIGINS` must be set to the **exact scheme+host** of
-  the staging frontend, e.g. `https://crime-tracker-staging.onrender.com`
+  the staging frontend, i.e. `https://staging.getcrimesignal.com`
   — comma-separated if more than one origin needs access (e.g. a
   preview-branch subdomain), matching the existing comma-separated
   format already used for local dev (`http://localhost:5173,http://

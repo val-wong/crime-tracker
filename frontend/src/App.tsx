@@ -86,7 +86,7 @@ export default function App() {
     <div className="app">
       <header className="app__header">
         <div>
-          <h1 className="app__title">Crime Tracker</h1>
+          <h1 className="app__title">CrimeSignal</h1>
           <p className="app__tagline">Chicago — reported incidents, not individual predictions</p>
         </div>
         <StatusBanner status={status} loading={statusLoading} />

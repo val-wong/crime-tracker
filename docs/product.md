@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Crime Tracker is a public-interest platform for exploring **aggregate,
+CrimeSignal is a public-interest platform for exploring **aggregate,
 area-level crime patterns** using official public crime-incident data
 published by cities. It exists to help residents, journalists,
 researchers, and local policymakers understand *what kinds of incidents
 are happening, where, and when* — using transparent, explainable,
 historical data.
 
-Crime Tracker is **not** a predictive-policing or surveillance tool. It
+CrimeSignal is **not** a predictive-policing or surveillance tool. It
 does not attempt to identify, profile, or score individuals. See
 "Safety & Ethics Constraints" below for hard boundaries that apply to
 every phase of this project.

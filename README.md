@@ -1,6 +1,6 @@
-# Crime Tracker
+# CrimeSignal
 
-Crime Tracker is a public-interest platform for exploring **aggregate,
+CrimeSignal is a public-interest platform for exploring **aggregate,
 area-level crime patterns** using official public crime-incident data
 published by cities.
 
