@@ -38,3 +38,5 @@ data/processed/*
 # --- Logs ---
 *.log
 npm-debug.log*
+*.dump
+*.sql
