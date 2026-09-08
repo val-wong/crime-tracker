@@ -1,0 +1,40 @@
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Python (backend) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.cover
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+
+# --- Data (raw/processed artifacts should not be committed by default) ---
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# --- Editors / OS ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+npm-debug.log*

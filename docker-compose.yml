@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: crime-tracker-postgres
+    environment:
+      POSTGRES_USER: crime_tracker
+      POSTGRES_PASSWORD: crime_tracker
+      POSTGRES_DB: crime_tracker
+    ports:
+      # Host port 5433 (not the default 5432) to avoid colliding with any
+      # other local Postgres instance already using 5432.
+      - "5433:5432"
+    # Docker's 64MB default /dev/shm is too small once the database holds
+    # Chicago's real ~8.6M-row dataset -- confirmed directly: VACUUM
+    # ANALYZE and large parallel hash/sort aggregate queries against the
+    # full table failed with "could not resize shared memory segment...
+    # No space left on device" at the default size. 1GB comfortably
+    # covers this dev workload without over-provisioning.
+    shm_size: "1gb"
+    # Default shared_buffers (128MB) is far smaller than the working set
+    # touched by a single dense-area close-zoom aggregate query (~1.1GB
+    # of distinct 8KB pages, confirmed via EXPLAIN (ANALYZE, BUFFERS) --
+    # see docs/performance-validation.md "Close-zoom outlier investigation").
+    # That means the buffer pool can't hold the scan's own working set,
+    # so even an immediately-repeated identical query gets no cache
+    # benefit -- pages read at the start are already evicted by the time
+    # the scan reaches the end. Raised to 1GB, well within this
+    # container's 7.75GB memory limit (observed usage ~1.9GB).
+    command: ["postgres", "-c", "shared_buffers=1GB"]
+    volumes:
+      - crime_tracker_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crime_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  crime_tracker_postgres_data:
