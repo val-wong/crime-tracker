@@ -196,6 +196,29 @@ was an explicit, higher-priority constraint than closing this
 remaining gap; documented here as an accepted V1 limitation rather than
 silently left unfixed.
 
+**Update (filter-consistency bugfix): the "Eligibility gate" above was
+incomplete.** It only named "no neighborhood filter" — it never
+mentioned `category`, and neither did the code: `_category_breakdown`'s
+rollup branch was gated on `neighborhood is None` alone, so a request
+with a `category` filter *and* a month-aligned date range still took
+the rollup path. `rollup_repo.category_breakdown` has no `category`
+parameter at all, so that filter was silently dropped — the breakdown
+(and therefore `most_common_category`) reflected *all* categories in
+range, not just the selected one, regardless of which path served it.
+A second, independent instance of the same class of bug was found in
+`top_neighborhoods_by_incident_count`, which never accepted or applied
+a `neighborhood` argument at all (always ignored it, in both the
+service-layer call and the repository function itself) — so
+`most_represented_neighborhood` could name a neighborhood other than
+the one explicitly filtered. Both are now fixed: the rollup gate is
+`category is None and neighborhood is None and is_month_aligned_range(...)`,
+and both repository functions correctly thread every filter (category
+*and* neighborhood) through `apply_incident_filters` on every path
+(raw and rollup-gate). See app/services/summary.py and
+app/repositories/summary.py, and
+`backend/tests/test_summary_filter_consistency.py` for the regression
+coverage.
+
 **A previously-undetected, unrelated bug found during this
 investigation:** `query_rollup`'s date-filter SQL used
 `:start_date::date` / `:end_date::date` — a bind parameter immediately

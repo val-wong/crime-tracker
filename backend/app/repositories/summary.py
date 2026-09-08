@@ -97,12 +97,28 @@ def category_breakdown(
     source_id: Optional[uuid.UUID],
     start_date: Optional[date],
     end_date: Optional[date],
+    category: Optional[str] = None,
     neighborhood: Optional[str] = None,
     limit: int = 20,
 ) -> list[CategoryCount]:
     """Counts offenses (not incidents) per source_category -- an
     incident with two offenses of different categories should count
-    toward both, which a per-incident count would miss."""
+    toward both, which a per-incident count would miss.
+
+    When `category` is given, this scopes to incidents matching that
+    category first (same as every other summary query -- see
+    `apply_incident_filters`), then breaks the *matching* incidents'
+    offenses down by category. In the overwhelming majority of cases
+    that yields a single row (the selected category itself); the one
+    documented exception is an incident that also carries a *second*,
+    different-category offense (e.g. one incident charged with both
+    NARCOTICS and a WEAPONS VIOLATION) -- that incident still
+    legitimately contributes a row under the other category too, by
+    the same offense-level counting convention as the unfiltered case
+    above. This is not the same bug as the breakdown ignoring the
+    filter entirely: every row here still only counts incidents that
+    matched `category` (and every other applied filter).
+    """
     stmt = (
         select(Offense.source_category, func.count().label("count"))
         .select_from(Offense)
@@ -113,7 +129,7 @@ def category_breakdown(
         source_id=source_id,
         start_date=start_date,
         end_date=end_date,
-        category=None,
+        category=category,
         neighborhood=neighborhood,
     )
     stmt = stmt.group_by(Offense.source_category).order_by(func.count().desc()).limit(limit)
@@ -155,8 +171,16 @@ def top_neighborhoods_by_incident_count(
     start_date: Optional[date],
     end_date: Optional[date],
     category: Optional[str] = None,
+    neighborhood: Optional[str] = None,
     limit: int = 10,
 ) -> list[NeighborhoodCount]:
+    """When `neighborhood` is already filtered, this necessarily
+    collapses to (at most) that one neighborhood -- still correct, just
+    not much of a "top" ranking anymore. Previously this ignored
+    `neighborhood` entirely and always ranked across every
+    neighborhood, which let it name a different neighborhood than the
+    one actually selected -- a real filter-consistency bug (see
+    app/services/summary.py::get_summary)."""
     stmt = select(Incident.neighborhood, func.count().label("count")).select_from(Incident)
     stmt = apply_incident_filters(
         stmt,
@@ -164,7 +188,7 @@ def top_neighborhoods_by_incident_count(
         start_date=start_date,
         end_date=end_date,
         category=category,
-        neighborhood=None,
+        neighborhood=neighborhood,
     )
     stmt = stmt.where(Incident.neighborhood.isnot(None))
     stmt = stmt.group_by(Incident.neighborhood).order_by(func.count().desc()).limit(limit)

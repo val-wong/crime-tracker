@@ -126,6 +126,39 @@ def test_summary_falls_back_to_raw_when_neighborhood_filter_present(db, monkeypa
     assert call_count == 1  # neighborhood filter -> rollup can't serve it, raw path used
 
 
+def test_summary_falls_back_to_raw_when_category_filter_present(db, monkeypatch):
+    """Regression test: `rollup_repo.category_breakdown` has no way to
+    scope to a single category (see docs/performance-validation.md
+    §8's "Update" note) -- a category filter must force the raw path,
+    the same way a neighborhood filter already does, or the filter
+    gets silently dropped."""
+    _ingest_fixture_rows(db, "chicago-summary-rollup-category-test")
+    refresh_rollup(db)
+
+    call_count = 0
+    original = summary_repo.category_breakdown
+
+    def counting_breakdown(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(summary_repo, "category_breakdown", counting_breakdown)
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/summary",
+            params={"start_date": "2001-01-01", "end_date": "2001-01-31", "category": "HOMICIDE"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    assert call_count == 1  # category filter -> rollup can't serve it, raw path used
+
+
 def test_rollup_and_raw_category_breakdown_agree_on_month_aligned_range(db):
     """The rollup substitution must never change the actual numbers --
     only which code path produces them."""

@@ -116,12 +116,14 @@ def _category_breakdown(
     source_id: Optional[UUID],
     start_date: date,
     end_date: date,
+    category: Optional[str],
     neighborhood: Optional[str],
 ) -> list[CategoryCount]:
     """Prefer the precomputed rollup (see docs/rollup-design.md and
     docs/performance-validation.md "Optimize /api/summary") whenever it
-    can answer exactly: no neighborhood filter (not a rollup dimension)
-    and a month-aligned date range. This is a pure substitution, not a
+    can answer exactly: no category filter and no neighborhood filter
+    (neither is a rollup dimension this query can slice by) and a
+    month-aligned date range. This is a pure substitution, not a
     semantic change -- the rollup's category rows already count
     incident-offense pairs, identical to the raw query's own documented
     convention. Real evidence: ~24s (raw, full-table join) vs. ~76ms
@@ -129,16 +131,29 @@ def _category_breakdown(
     a category like THEFT matches too large a fraction of `offenses`
     for any index to help the raw path; falls back to the raw query
     for anything the rollup can't serve exactly (a non-month-aligned
-    range, or a neighborhood filter).
+    range, a category filter, or a neighborhood filter).
+
+    The category filter matters here specifically because a prior
+    version of this function never threaded `category` through to
+    either query path at all -- the breakdown (and therefore
+    `most_common_category`) silently ignored a selected category
+    filter entirely, which could report a category the caller had
+    explicitly filtered out. See app/repositories/summary.py's
+    `category_breakdown` for how `category` is now applied.
     """
-    if neighborhood is None and rollup_repo.is_month_aligned_range(start_date, end_date):
+    if (
+        category is None
+        and neighborhood is None
+        and rollup_repo.is_month_aligned_range(start_date, end_date)
+    ):
         rows = rollup_repo.category_breakdown(db, start_date=start_date, end_date=end_date)
-        return [CategoryCount(category=category, count=count) for category, count in rows]
+        return [CategoryCount(category=cat, count=count) for cat, count in rows]
     return summary_repo.category_breakdown(
         db,
         source_id=source_id,
         start_date=start_date,
         end_date=end_date,
+        category=category,
         neighborhood=neighborhood,
     )
 
@@ -234,6 +249,7 @@ def get_summary(
             source_id=source_id,
             start_date=start_date,
             end_date=effective_end_date,
+            category=category,
             neighborhood=neighborhood,
         ),
         incidents_by_time=incidents_by_time,
@@ -244,5 +260,6 @@ def get_summary(
             start_date=start_date,
             end_date=effective_end_date,
             category=category,
+            neighborhood=neighborhood,
         ),
     )

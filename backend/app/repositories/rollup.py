@@ -113,8 +113,11 @@ def category_breakdown(
     documented convention (see docs/rollup-design.md) -- this is a pure
     substitution, not a semantic change.
 
-    Callers must have already confirmed eligibility (no neighborhood
-    filter, month-aligned date range per `is_month_aligned_range`).
+    Callers must have already confirmed eligibility (no category
+    filter -- this function has no way to scope to one category --, no
+    neighborhood filter, month-aligned date range per
+    `is_month_aligned_range`; see app/services/summary.py's
+    `_category_breakdown` for the gating logic).
 
     Real evidence for this fix (see docs/performance-validation.md):
     the raw-table equivalent (`offenses ⋈ incidents`) took ~24s at full
