@@ -340,19 +340,48 @@ def aggregate_incidents(
 ) -> list[GridCell]:
     """Group incidents into `grid_degrees`-sized cells and count each --
     a deliberately simple alternative to H3 (see
-    docs/map-aggregation.md), pragmatic for a single-city V1. Cells are
-    labeled by their center point. `max_cells` bounds the response size
-    regardless of how many incidents match (ordered by count
-    descending, so the busiest cells are never dropped first)."""
+    docs/map-aggregation.md), pragmatic for a single-city V1.
+
+    Cells are labeled by the **centroid of their contributing
+    incidents' actual coordinates**, not the geometric cell center --
+    confirmed via direct inspection of the real Chicago dataset that
+    the geometric center (`floor(lon/grid)*grid + grid/2`) can land
+    outside the true coordinate range of every single incident
+    assigned to that cell: cell (-87.525, 41.775) at the 0.05° grid
+    has 3,514 real incidents, every one of them at longitude <=
+    -87.5414 (west, on land, along the lakefront) -- yet its
+    geometric center (-87.525) is *east* of all of them, out over
+    Lake Michigan. This is a direct, mechanical consequence of a
+    shoreline cell not being uniformly populated: the geometric
+    formula only depends on which grid cell a point falls in, never
+    on where within that cell its real points actually are. The
+    centroid (`avg(lon)`, `avg(lat)`) is computed from the exact same
+    grouped rows already being counted -- an aggregate function
+    alongside `count()` in the same pass, not an extra scan or join --
+    and by construction can never fall outside the convex hull of the
+    points it averages, so it can never drift into a part of the cell
+    (e.g. open water) that has zero contributing incidents. `max_cells`
+    bounds the response size regardless of how many incidents match
+    (ordered by count descending, so the busiest cells are never
+    dropped first)."""
     point = cast(Incident.location, Geometry)
     lon = func.ST_X(point)
     lat = func.ST_Y(point)
-    cell_lon = (func.floor(lon / grid_degrees) * grid_degrees + grid_degrees / 2).label("lon")
-    cell_lat = (func.floor(lat / grid_degrees) * grid_degrees + grid_degrees / 2).label("lat")
+    # Cell *membership* is still the plain geometric bucket -- grouping
+    # by this key is unchanged from before, so which incidents land in
+    # which cell (and therefore every cell's count) is identical to the
+    # prior geometric-center implementation. Only the *displayed*
+    # lon/lat below changes.
+    cell_key_lon = func.floor(lon / grid_degrees)
+    cell_key_lat = func.floor(lat / grid_degrees)
+    centroid_lon = func.avg(lon).label("lon")
+    centroid_lat = func.avg(lat).label("lat")
     count = func.count().label("count")
 
     stmt = (
-        select(cell_lon, cell_lat, count).select_from(Incident).where(Incident.location.isnot(None))
+        select(centroid_lon, centroid_lat, count)
+        .select_from(Incident)
+        .where(Incident.location.isnot(None))
     )
     stmt = apply_incident_filters(
         stmt,
@@ -363,7 +392,7 @@ def aggregate_incidents(
         neighborhood=neighborhood,
         bbox=bbox,
     )
-    stmt = stmt.group_by(cell_lon, cell_lat).order_by(count.desc()).limit(max_cells)
+    stmt = stmt.group_by(cell_key_lon, cell_key_lat).order_by(count.desc()).limit(max_cells)
     rows = db.execute(stmt).all()
     return [GridCell(lon=row.lon, lat=row.lat, count=row.count) for row in rows]
 

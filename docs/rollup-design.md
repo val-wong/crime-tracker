@@ -47,7 +47,8 @@ wins.
 | Column | Type | Notes |
 |---|---|---|
 | `grid_size` | float | `0.05` or `0.02` — see "Which grid sizes" below |
-| `cell_lon`, `cell_lat` | float | cell center, same convention as the raw aggregate query |
+| `cell_lon`, `cell_lat` | float | geometric cell bucket identity (`floor(lon/grid)*grid + grid/2`) — used for grouping and bbox filtering, **not** for display; see "Representative-coordinate (shoreline) fix" below |
+| `centroid_lon`, `centroid_lat` | float | average of this cell/month/category's *actual* contributing incident coordinates — this is what the API returns as a cell's `lon`/`lat` (migration `0010`) |
 | `month_bucket` | date | first-of-month, `date_trunc('month', occurred_at)` |
 | `category` | varchar, nullable | `NULL` = category-agnostic row; otherwise one source category |
 | `incident_count` | bigint | the count for that combination |
@@ -58,7 +59,68 @@ about 1.1% storage overhead for a rollup covering the two slowest
 query shapes. Verified correct by direct spot-check against the raw
 table (exact match on multiple cells/months/categories, including the
 busiest real cell: 1,436 THEFT incidents in one 0.05° cell in August
-2017).
+2017). Adding `centroid_lon`/`centroid_lat` (migration `0010`) added
+two more `double precision` columns across the same ~1.04M rows — on
+the order of 16 MB before page overhead, negligible against the
+existing 191 MB.
+
+### Representative-coordinate (shoreline) fix
+
+**Real bug found during manual QA:** at wide/medium aggregate zoom,
+some circles rendered offshore in Lake Michigan, even though every
+incident contributing to that circle was on land — and zooming in far
+enough to switch to individual incidents showed the underlying points
+correctly on/near land, confirming the raw coordinates were never
+wrong. Root cause, confirmed directly against the real dataset: cells
+were displayed at their **geometric** center
+(`floor(lon/grid)*grid + grid/2`), computed independent of where the
+contributing incidents actually sit within that cell. The 0.05°-grid
+cell at (-87.525, 41.775) has 3,514 real incidents, every one at
+longitude <= -87.5414 (the land/lakefront side) — yet its geometric
+center (-87.525) sits *east* of all of them, out over open water. A
+shoreline cell simply isn't uniformly populated, and the geometric
+formula has no way to know that.
+
+**Fix:** `centroid_lon`/`centroid_lat` — the average of a cell's actual
+contributing incident coordinates — computed once per refresh in the
+same grouped aggregation that already computes `incident_count` (one
+extra `avg()` alongside `count()`, not an additional scan or join), so
+the added refresh cost is expected to be immaterial. An average can
+never fall outside the range of the values it averages, so it can
+never land in a part of a cell that has zero contributing incidents —
+unlike the geometric center, which is entirely blind to where within
+the cell its incidents actually are. `cell_lon`/`cell_lat` keep their
+existing role (grouping identity, bbox filtering in
+`app/repositories/rollup.py`'s `query_rollup`) completely unchanged;
+`centroid_lon`/`centroid_lat` are purely additive. The identical fix
+applies to the raw-table path (`app/repositories/incidents.py`'s
+`aggregate_incidents`), computing the same centroid live instead of
+precomputed, since that path already scans exactly the rows being
+counted.
+
+**Combining centroids across multiple rollup rows** (a date range
+spanning several months sums multiple `month_bucket` rows for the same
+cell): a plain average of each month's already-averaged centroid would
+be wrong unless every month had the same count. `query_rollup` instead
+weights by `incident_count`
+(`sum(centroid_lon * incident_count) / sum(incident_count)`) — the
+standard, exact way to combine several group means into the same
+overall mean that averaging every underlying incident directly would
+have produced, without needing the raw incident rows at all.
+
+**Migration cost:** materialized views cannot be altered to add a
+column in place (there is no `ALTER MATERIALIZED VIEW ... ADD COLUMN`)
+— the view's shape is entirely determined by the query defining it, so
+adding a column means dropping and recreating it, a full rebuild
+scanning `incidents`/`offenses` again. Measured directly: a plain
+`REFRESH MATERIALIZED VIEW CONCURRENTLY` on the *unchanged* view took
+313s against the complete dataset immediately before this migration;
+migration `0010`'s drop-and-rebuild (non-concurrent, since there's no
+prior data in a just-recreated view to keep serving) took 265s — the
+same cost class, not a new order of magnitude. This is a one-time
+migration cost, not a change to routine refresh behavior (routine
+refreshes after ingestion runs remain `REFRESH ... CONCURRENTLY`,
+unaffected in kind by having two more columns to recompute).
 
 ### Which grid sizes are materialized, and why
 

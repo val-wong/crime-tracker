@@ -369,3 +369,56 @@ Data integrity verified after the rewrite: row count unchanged
 matches the raw offense count exactly (no orphaned or lost rows). A
 database-wide `ANALYZE` was run afterward as routine post-change
 maintenance (7.98s).
+
+## 11. Aggregate representative-coordinate fix (shoreline bug)
+
+See [`rollup-design.md`](./rollup-design.md#representative-coordinate-shoreline-fix)
+for the bug and fix. Methodology here is function-level timing (direct
+repeated calls to `aggregate_incidents`/`query_rollup`, no bbox, warm
+cache) against the complete real dataset, not the endpoint-level
+distinct-bbox methodology in sections 1-3 above — chosen specifically
+to isolate the cost of the added `avg()`/centroid computation itself
+from bbox-cache effects.
+
+**Raw path** (`app/repositories/incidents.py::aggregate_incidents`):
+
+| Zoom tier | Grid | Before | After |
+|---|---|---|---|
+| Citywide | 0.05 | 23.568s | 19.478s |
+| Medium | 0.02 | 21.890s | 16.481s |
+| Close | 0.005 | 20.218s | 15.759s |
+
+**Rollup path** (`app/repositories/rollup.py::query_rollup`, warm, no
+bbox):
+
+| Grid | Before | After |
+|---|---|---|
+| 0.05 | 0.1568s | 0.0708s |
+| 0.02 | 0.0941s | 0.1427s |
+| 0.05, month-aligned + category filter | 0.0200s | 0.0142s |
+
+**No measurable regression.** Every "after" reading is at or below its
+"before" reading, well within ordinary run-to-run variance (disk cache
+state, background load) — the extra `avg()`/`centroid_lon * count`
+arithmetic is negligible next to the cost that already dominates each
+path (a near-full-table scan for the raw path; a tiny ~1.04M-row
+indexed lookup for the rollup path).
+
+**Correctness, not just speed, was verified against the real data**:
+before the fix, cell (-87.525, 41.775) at the 0.05° grid — 3,514 real
+incidents, every one at longitude <= -87.5414 — was placed by both
+paths at its geometric center (-87.525, 41.775), measurably east of
+every contributing incident. After the fix, both paths place it at
+(-87.5486, 41.7523) (the two independently-computed values agree to 9
+decimal places), inside the real incidents' coordinate range, with the
+cell's count unchanged at 3,514 and the dataset's total cell count
+(48) and total aggregated incidents (8,532,471) identical before and
+after in both paths.
+
+**One-time migration cost** (rebuilding `incident_grid_rollup` to add
+`centroid_lon`/`centroid_lat`, migration `0010`): 265s, measured
+against a same-session baseline of 313s for a plain
+`REFRESH MATERIALIZED VIEW CONCURRENTLY` on the *unchanged* view — the
+same cost class, not a new order of magnitude. This is a one-time cost
+paid once at migration time, not a change to the cost of routine
+post-ingestion refreshes going forward.

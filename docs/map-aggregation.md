@@ -71,17 +71,36 @@ filter on the same column.
 ## Grid aggregation (no H3)
 
 `GET /api/incidents/aggregate` groups incidents into square
-degree-sized cells:
+degree-sized cells, identified by:
 
 ```sql
-floor(ST_X(location::geometry) / grid) * grid + grid/2  -- cell center longitude
-floor(ST_Y(location::geometry) / grid) * grid + grid/2  -- cell center latitude
+floor(ST_X(location::geometry) / grid)  -- cell bucket (longitude)
+floor(ST_Y(location::geometry) / grid)  -- cell bucket (latitude)
 ```
 
 grouped and counted per cell, ordered by count descending, capped at
 `max_cells` (default 5000) so the response size never depends on how
 many incidents are in view — only on how many *cells* are, which is
 bounded by the viewport and the chosen grid size.
+
+**Each cell's displayed coordinate is the centroid (`avg`) of its
+contributing incidents' actual coordinates, not the geometric center of
+the cell** (`floor(lon/grid)*grid + grid/2`, which the formula above
+computed directly until a real map-quality bug was found and fixed: at
+wide/medium zoom, some circles rendered offshore in Lake Michigan even
+though every contributing incident was on land — see
+[`rollup-design.md`](./rollup-design.md#representative-coordinate-shoreline-fix)
+for the full root-cause and fix, which applies identically to this raw
+path and the rollup below). The centroid is computed in the exact same
+grouped query that already computes the count (one extra `avg()`
+alongside `count()`, not an additional scan), and — because an average
+can never fall outside the range of the values it averages — can never
+land in a part of a cell (e.g. open water) with zero contributing
+incidents the way the geometric center could. This is still a
+*generalized, aggregate* point, not a claim about any individual
+incident's exact location; it just now stays honest to where the
+aggregated incidents actually are, rather than to the cell's arbitrary
+geometric boundary.
 
 **H3 was deliberately not introduced.** A plain lon/lat grid is
 sufficient for a single city at V1: it needs no new dependency, no

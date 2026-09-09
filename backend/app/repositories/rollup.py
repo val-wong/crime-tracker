@@ -50,6 +50,19 @@ def query_rollup(
     of ROLLUP_GRID_SIZES, no neighborhood filter, and the date range is
     month-aligned per `is_month_aligned_range`) -- this function trusts
     that and does not re-check it, to keep it a pure query function.
+
+    The returned `lon`/`lat` are the count-weighted average of each
+    matched row's own `centroid_lon`/`centroid_lat` (the actual
+    contributing incidents' average position within that cell/month --
+    see migration 0010), not `cell_lon`/`cell_lat` (the geometric grid
+    center, still used unchanged below for grouping identity and bbox
+    filtering). A request spanning multiple months sums several rows
+    per cell, each already an average over a different incident count,
+    so combining them with a plain average would be wrong -- weighting
+    by `incident_count` (`sum(centroid * count) / sum(count)`) is the
+    standard, exact way to combine several group means into the same
+    overall mean that averaging every underlying incident directly
+    would have produced, without needing the raw incident rows at all.
     """
     where_clauses = ["grid_size = :grid_size"]
     params: dict = {"grid_size": grid_degrees, "max_cells": max_cells}
@@ -86,7 +99,10 @@ def query_rollup(
         params["max_lat"] = bbox.max_lat
 
     sql = f"""
-        SELECT cell_lon, cell_lat, sum(incident_count)::bigint AS count
+        SELECT
+            sum(incident_count)::bigint AS count,
+            sum(centroid_lon * incident_count) / sum(incident_count) AS lon,
+            sum(centroid_lat * incident_count) / sum(incident_count) AS lat
         FROM incident_grid_rollup
         WHERE {" AND ".join(where_clauses)}
         GROUP BY cell_lon, cell_lat
@@ -94,7 +110,7 @@ def query_rollup(
         LIMIT :max_cells
     """
     rows = db.execute(text(sql), params).all()
-    return [GridCell(lon=row.cell_lon, lat=row.cell_lat, count=row.count) for row in rows]
+    return [GridCell(lon=row.lon, lat=row.lat, count=row.count) for row in rows]
 
 
 def category_breakdown(
